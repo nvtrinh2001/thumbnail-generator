@@ -12,11 +12,82 @@ import (
 
 	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
+	. "github.com/tbxark/g4vercel"
 	godraw "golang.org/x/image/draw"
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/gomedium"
 	"golang.org/x/image/font/gofont/goregular"
 )
+
+func Handler(w http.ResponseWriter, r *http.Request) {
+	server := New()
+
+	server.GET("/", func(context *Context) {
+		topic := r.URL.Query().Get("topic")
+		title := r.URL.Query().Get("title")
+
+		thumbnail := generateThumbnail(topic, title)
+
+		externalImgFile, err := os.Open("ghost-2.jpg")
+		if err != nil {
+			fmt.Println("Error opening base image:", err)
+			return
+		}
+		defer externalImgFile.Close()
+
+		externalImg, _, err := image.Decode(externalImgFile)
+		if err != nil {
+			fmt.Println("Error decoding base image:", err)
+			return
+		}
+
+		newImg := image.NewRGBA(thumbnail.Bounds())
+
+		// Set the expected size that you want:
+		resizedImg := image.NewRGBA(image.Rect(0, 0, 160, 160))
+
+		// Resize:
+		godraw.NearestNeighbor.Scale(resizedImg, resizedImg.Rect, externalImg, externalImg.Bounds(), godraw.Over, nil)
+
+		// Draw the base image onto the new image
+		draw.Draw(newImg, thumbnail.Bounds(), thumbnail, image.Point{}, draw.Src)
+
+		// Calculate the position to place the external image on the base image
+		externalImgPosition := image.Point{X: newImg.Rect.Dx() - resizedImg.Rect.Dx() - 80, Y: newImg.Rect.Dy() - resizedImg.Rect.Dy() - 80}
+
+		maskedImg := image.NewRGBA(resizedImg.Bounds())
+
+		draw.DrawMask(maskedImg, maskedImg.Bounds(), resizedImg, image.Point{}, &circle{image.Point{80, 80}, 80}, image.Point{}, draw.Over)
+
+		// Draw the external image onto the new image at the specified position
+		draw.Draw(newImg, resizedImg.Bounds().Add(externalImgPosition), maskedImg, image.Point{}, draw.Over)
+
+		// Save the resulting image to a file
+		outputFile, err := os.Create("output-image.jpg") // Replace with your desired output file path
+		if err != nil {
+			fmt.Println("Error creating output file:", err)
+			return
+		}
+		defer outputFile.Close()
+
+		// Encode the new image and save it to the output file
+		err = png.Encode(outputFile, newImg)
+		if err != nil {
+			fmt.Println("Error encoding image:", err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "image/png")
+
+		err = png.Encode(w, newImg)
+		if err != nil {
+			http.Error(w, "Error encoding image", http.StatusInternalServerError)
+			return
+		}
+	})
+
+	server.Handle(w, r)
+}
 
 func generateThumbnail(topic, title string) image.Image {
 	thumbnailWidth := 1200
@@ -120,70 +191,6 @@ func (c *circle) At(x, y int) color.Color {
 		return color.Alpha{255}
 	}
 	return color.Alpha{0}
-}
-
-func Handler(w http.ResponseWriter, r *http.Request) {
-	topic := r.URL.Query().Get("topic")
-	title := r.URL.Query().Get("title")
-
-	thumbnail := generateThumbnail(topic, title)
-
-	externalImgFile, err := os.Open("ghost-2.jpg")
-	if err != nil {
-		fmt.Println("Error opening base image:", err)
-		return
-	}
-	defer externalImgFile.Close()
-
-	externalImg, _, err := image.Decode(externalImgFile)
-	if err != nil {
-		fmt.Println("Error decoding base image:", err)
-		return
-	}
-
-	newImg := image.NewRGBA(thumbnail.Bounds())
-
-	// Set the expected size that you want:
-	resizedImg := image.NewRGBA(image.Rect(0, 0, 160, 160))
-
-	// Resize:
-	godraw.NearestNeighbor.Scale(resizedImg, resizedImg.Rect, externalImg, externalImg.Bounds(), godraw.Over, nil)
-
-	// Draw the base image onto the new image
-	draw.Draw(newImg, thumbnail.Bounds(), thumbnail, image.Point{}, draw.Src)
-
-	// Calculate the position to place the external image on the base image
-	externalImgPosition := image.Point{X: newImg.Rect.Dx() - resizedImg.Rect.Dx() - 80, Y: newImg.Rect.Dy() - resizedImg.Rect.Dy() - 80}
-
-	maskedImg := image.NewRGBA(resizedImg.Bounds())
-
-	draw.DrawMask(maskedImg, maskedImg.Bounds(), resizedImg, image.Point{}, &circle{image.Point{80, 80}, 80}, image.Point{}, draw.Over)
-
-	// Draw the external image onto the new image at the specified position
-	draw.Draw(newImg, resizedImg.Bounds().Add(externalImgPosition), maskedImg, image.Point{}, draw.Over)
-
-	// Save the resulting image to a file
-	outputFile, err := os.Create("output-image.jpg") // Replace with your desired output file path
-	if err != nil {
-		fmt.Println("Error creating output file:", err)
-		return
-	}
-	defer outputFile.Close()
-
-	// Encode the new image and save it to the output file
-	err = png.Encode(outputFile, newImg)
-	if err != nil {
-		fmt.Println("Error encoding image:", err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "image/png")
-
-	err = png.Encode(w, newImg)
-	if err != nil {
-		http.Error(w, "Error encoding image", http.StatusInternalServerError)
-		return
-	}
 }
 
 func drawTitle(img *image.RGBA, title string, fontSize float64, textColor color.RGBA) {
