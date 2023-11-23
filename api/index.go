@@ -7,7 +7,6 @@ import (
 	"image/draw"
 	"image/png"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/golang/freetype"
@@ -24,16 +23,17 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	thumbnail := generateThumbnail(topic, title)
 
-	externalImgFile, err := os.Open("ghost-2.jpg")
+	// Open the external image
+	resp, err := http.Get("https://res.cloudinary.com/placemark-image-gallery/image/upload/v1700706537/seez65qko0eecyzvl4hk.jpg") // Replace with your image URL
 	if err != nil {
-		fmt.Println("Error opening base image:", err)
+		fmt.Println("Error fetching image:", err)
 		return
 	}
-	defer externalImgFile.Close()
+	defer resp.Body.Close()
 
-	externalImg, _, err := image.Decode(externalImgFile)
+	externalImg, _, err := image.Decode(resp.Body)
 	if err != nil {
-		fmt.Println("Error decoding base image:", err)
+		fmt.Println("Error decoding image:", err)
 		return
 	}
 
@@ -57,21 +57,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	// Draw the external image onto the new image at the specified position
 	draw.Draw(newImg, resizedImg.Bounds().Add(externalImgPosition), maskedImg, image.Point{}, draw.Over)
-
-	// Save the resulting image to a file
-	outputFile, err := os.Create("output-image.jpg") // Replace with your desired output file path
-	if err != nil {
-		fmt.Println("Error creating output file:", err)
-		return
-	}
-	defer outputFile.Close()
-
-	// Encode the new image and save it to the output file
-	err = png.Encode(outputFile, newImg)
-	if err != nil {
-		fmt.Println("Error encoding image:", err)
-		return
-	}
 
 	w.Header().Set("Content-Type", "image/png")
 
