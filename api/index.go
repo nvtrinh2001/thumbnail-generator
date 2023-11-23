@@ -122,7 +122,7 @@ func (c *circle) At(x, y int) color.Color {
 	return color.Alpha{0}
 }
 
-func Thumbnails(w http.ResponseWriter, r *http.Request) {
+func Handler(w http.ResponseWriter, r *http.Request) {
 	topic := r.URL.Query().Get("topic")
 	title := r.URL.Query().Get("title")
 
